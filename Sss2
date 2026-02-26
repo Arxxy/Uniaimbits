@@ -8,170 +8,211 @@ local FOV_RADIUS=150
 local SMOOTHNESS=0.6
 local TARGET_PART="Head"
 local PREDICTION=0.15
+local SENSITIVITY=1.0
 local AimEnabled=false
 local ESPEnabled=false
-local MINIMIZED=false
+local ShowTracers=false
+local ShowHealth=false
+local LOCK_MODE="Crosshair"
+local TEAM_CHECK=false
 local espBoxes={}
-local ACCENT=Color3.fromRGB(0,170,255)
-local GREEN=Color3.fromRGB(0,200,80)
-local RED=Color3.fromRGB(150,0,0)
-local ACTIVE=Color3.fromRGB(0,170,0)
+local tracerLines={}
+local ACCENT=Color3.fromRGB(100,180,255)
+local GREEN=Color3.fromRGB(80,220,120)
+local RED=Color3.fromRGB(220,70,70)
+local ACTIVE=Color3.fromRGB(80,200,120)
+local BG=Color3.fromRGB(15,15,15)
+local BG2=Color3.fromRGB(22,22,22)
+local BG3=Color3.fromRGB(30,30,30)
+local TEXT=Color3.fromRGB(240,240,240)
+local SUBTEXT=Color3.fromRGB(140,140,140)
 local pulseUp=true
 local pulseTween=nil
+local guiOpen=true
 
 local PRESETS={
-	{name="Blue", color=Color3.fromRGB(0,170,255)},
-	{name="Red", color=Color3.fromRGB(255,60,60)},
-	{name="Purple", color=Color3.fromRGB(170,0,255)},
-	{name="Green", color=Color3.fromRGB(0,220,100)},
-	{name="Orange", color=Color3.fromRGB(255,140,0)},
+	{name="Sky",color=Color3.fromRGB(100,180,255)},
+	{name="Rose",color=Color3.fromRGB(255,100,140)},
+	{name="Violet",color=Color3.fromRGB(160,100,255)},
+	{name="Mint",color=Color3.fromRGB(80,220,160)},
+	{name="Amber",color=Color3.fromRGB(255,180,60)},
 }
 
+local function isSameTeam(plr)
+	if not TEAM_CHECK then return false end
+	local myTeam=player.Team local theirTeam=plr.Team
+	if myTeam and theirTeam then
+		if myTeam==theirTeam then return true end
+		if myTeam.Name==theirTeam.Name then return true end
+		if myTeam.TeamColor==theirTeam.TeamColor then return true end
+	end
+	local myChar=player.Character local theirChar=plr.Character
+	if myChar and theirChar then
+		local ms=myChar:FindFirstChildOfClass("Shirt")
+		local ts=theirChar:FindFirstChildOfClass("Shirt")
+		if ms and ts and ms.ShirtTemplate==ts.ShirtTemplate then return true end
+	end
+	return false
+end
+
 local ScreenGui=Instance.new("ScreenGui")
-ScreenGui.Name="AimSexer2000"
+ScreenGui.Name="AS2K"
 ScreenGui.ResetOnSpawn=false
 ScreenGui.IgnoreGuiInset=true
 ScreenGui.Parent=player:WaitForChild("PlayerGui")
 
--- DROP SHADOW
+-- BACKDROP (click outside to close)
+local Backdrop=Instance.new("TextButton")
+Backdrop.Size=UDim2.new(1,0,1,0)
+Backdrop.BackgroundColor3=Color3.new(0,0,0)
+Backdrop.BackgroundTransparency=0.5
+Backdrop.BorderSizePixel=0
+Backdrop.Text=""
+Backdrop.ZIndex=2
+Backdrop.Visible=true
+Backdrop.Parent=ScreenGui
+
+-- MAIN POPUP
+local Popup=Instance.new("Frame")
+Popup.Size=UDim2.new(0,320,0,420)
+Popup.AnchorPoint=Vector2.new(0.5,0.5)
+Popup.Position=UDim2.new(0.5,0,0.5,0)
+Popup.BackgroundColor3=BG
+Popup.BorderSizePixel=0
+Popup.ZIndex=3
+Popup.Parent=ScreenGui
+Instance.new("UICorner",Popup).CornerRadius=UDim.new(0,18)
+
+-- SHADOW
 local Shadow=Instance.new("ImageLabel")
-Shadow.Size=UDim2.new(1,30,1,30)
-Shadow.Position=UDim2.new(0,-15,0,-15)
+Shadow.Size=UDim2.new(1,40,1,40)
+Shadow.Position=UDim2.new(0,-20,0,-20)
 Shadow.BackgroundTransparency=1
 Shadow.Image="rbxassetid://6014261993"
 Shadow.ImageColor3=Color3.new(0,0,0)
-Shadow.ImageTransparency=0.5
+Shadow.ImageTransparency=0.3
 Shadow.ScaleType=Enum.ScaleType.Slice
 Shadow.SliceCenter=Rect.new(49,49,450,450)
-Shadow.Parent=ScreenGui
-Shadow.ZIndex=0
+Shadow.ZIndex=2
+Shadow.Parent=Popup
 
-local MainFrame=Instance.new("Frame")
-MainFrame.Size=UDim2.new(0,180,0,340)
-MainFrame.Position=UDim2.new(0.5,-90,0.5,-170)
-MainFrame.BackgroundColor3=Color3.fromRGB(22,22,22)
-MainFrame.BorderSizePixel=0
-MainFrame.Active=true
-MainFrame.ZIndex=1
-MainFrame.Parent=ScreenGui
-Instance.new("UICorner",MainFrame).CornerRadius=UDim.new(0,14)
+-- TOP BAR
+local TopBar=Instance.new("Frame")
+TopBar.Size=UDim2.new(1,0,0,56)
+TopBar.BackgroundTransparency=1
+TopBar.ZIndex=3
+TopBar.Parent=Popup
 
-local function syncShadow()
-	Shadow.Position=UDim2.new(
-		MainFrame.Position.X.Scale,MainFrame.Position.X.Offset-15,
-		MainFrame.Position.Y.Scale,MainFrame.Position.Y.Offset-15
-	)
-	Shadow.Size=UDim2.new(0,MainFrame.AbsoluteSize.X+30,0,MainFrame.AbsoluteSize.Y+30)
-end
+local AppName=Instance.new("TextLabel")
+AppName.Size=UDim2.new(1,-60,1,0)
+AppName.Position=UDim2.new(0,20,0,0)
+AppName.BackgroundTransparency=1
+AppName.Text="Aim Sexer 2000"
+AppName.TextScaled=true
+AppName.Font=Enum.Font.GothamBold
+AppName.TextColor3=TEXT
+AppName.TextXAlignment=Enum.TextXAlignment.Left
+AppName.ZIndex=3
+AppName.Parent=TopBar
 
-local TitleBar=Instance.new("Frame")
-TitleBar.Size=UDim2.new(1,0,0,40)
-TitleBar.BackgroundColor3=Color3.fromRGB(30,30,30)
-TitleBar.BorderSizePixel=0
-TitleBar.Active=true
-TitleBar.Parent=MainFrame
-Instance.new("UICorner",TitleBar).CornerRadius=UDim.new(0,14)
+local CloseBtn=Instance.new("TextButton")
+CloseBtn.Size=UDim2.new(0,28,0,28)
+CloseBtn.Position=UDim2.new(1,-46,0.5,-14)
+CloseBtn.BackgroundColor3=BG3
+CloseBtn.Text="✕"
+CloseBtn.TextScaled=true
+CloseBtn.Font=Enum.Font.GothamBold
+CloseBtn.TextColor3=SUBTEXT
+CloseBtn.ZIndex=3
+CloseBtn.Parent=TopBar
+Instance.new("UICorner",CloseBtn).CornerRadius=UDim.new(1,0)
 
-local fix=Instance.new("Frame")
-fix.Size=UDim2.new(1,0,0,14)
-fix.Position=UDim2.new(0,0,1,-14)
-fix.BackgroundColor3=Color3.fromRGB(30,30,30)
-fix.BorderSizePixel=0
-fix.Parent=TitleBar
+-- DIVIDER
+local Divider=Instance.new("Frame")
+Divider.Size=UDim2.new(1,-40,0,1)
+Divider.Position=UDim2.new(0,20,0,56)
+Divider.BackgroundColor3=BG3
+Divider.BorderSizePixel=0
+Divider.ZIndex=3
+Divider.Parent=Popup
 
-local TitleLbl=Instance.new("TextLabel")
-TitleLbl.Size=UDim2.new(1,-44,1,0)
-TitleLbl.Position=UDim2.new(0,10,0,0)
-TitleLbl.BackgroundTransparency=1
-TitleLbl.Text="Aim Sexer 2000"
-TitleLbl.TextScaled=true
-TitleLbl.Font=Enum.Font.GothamBold
-TitleLbl.TextColor3=Color3.new(1,1,1)
-TitleLbl.TextXAlignment=Enum.TextXAlignment.Left
-TitleLbl.Parent=TitleBar
-
-local MinBtn=Instance.new("TextButton")
-MinBtn.Size=UDim2.new(0,28,0,28)
-MinBtn.Position=UDim2.new(1,-34,0.5,-14)
-MinBtn.Text="-"
-MinBtn.TextScaled=true
-MinBtn.Font=Enum.Font.GothamBold
-MinBtn.BackgroundColor3=Color3.fromRGB(60,60,60)
-MinBtn.TextColor3=Color3.new(1,1,1)
-MinBtn.Parent=TitleBar
-Instance.new("UICorner",MinBtn).CornerRadius=UDim.new(0,8)
-
+-- TAB BAR
 local TabBar=Instance.new("Frame")
-TabBar.Size=UDim2.new(1,0,0,30)
-TabBar.Position=UDim2.new(0,0,0,40)
-TabBar.BackgroundColor3=Color3.fromRGB(28,28,28)
+TabBar.Size=UDim2.new(1,-40,0,36)
+TabBar.Position=UDim2.new(0,20,0,68)
+TabBar.BackgroundColor3=BG2
 TabBar.BorderSizePixel=0
-TabBar.Parent=MainFrame
+TabBar.ZIndex=3
+TabBar.Parent=Popup
+Instance.new("UICorner",TabBar).CornerRadius=UDim.new(0,10)
+
+-- TAB INDICATOR (sliding pill)
+local TabIndicator=Instance.new("Frame")
+TabIndicator.Size=UDim2.new(1/3,-4,1,-4)
+TabIndicator.Position=UDim2.new(0,2,0,2)
+TabIndicator.BackgroundColor3=BG3
+TabIndicator.BorderSizePixel=0
+TabIndicator.ZIndex=4
+TabIndicator.Parent=TabBar
+Instance.new("UICorner",TabIndicator).CornerRadius=UDim.new(0,8)
 
 local tabNames={"Aim","ESP","Theme"}
 local tabs={}
 local tabScrolls={}
 local tabInners={}
 local activeTab="Aim"
+local activeTabIndex=1
 
 for i,name in ipairs(tabNames) do
 	local btn=Instance.new("TextButton")
 	btn.Size=UDim2.new(1/#tabNames,0,1,0)
 	btn.Position=UDim2.new((i-1)/#tabNames,0,0,0)
-	btn.Text=name
-	btn.TextScaled=true
+	btn.Text=name btn.TextScaled=true
 	btn.Font=Enum.Font.GothamBold
-	btn.BackgroundColor3=name==activeTab and Color3.fromRGB(35,35,35) or Color3.fromRGB(28,28,28)
-	btn.TextColor3=name==activeTab and ACCENT or Color3.fromRGB(150,150,150)
-	btn.BorderSizePixel=0
+	btn.BackgroundTransparency=1
+	btn.TextColor3=name==activeTab and TEXT or SUBTEXT
+	btn.ZIndex=5
 	btn.Parent=TabBar
 	tabs[name]=btn
 
 	local scroll=Instance.new("ScrollingFrame")
-	scroll.Size=UDim2.new(1,0,1,-100)
-	scroll.Position=UDim2.new(0,0,0,70)
+	scroll.Size=UDim2.new(1,-40,1,-170)
+	scroll.Position=UDim2.new(0,20,0,115)
 	scroll.BackgroundTransparency=1
 	scroll.BorderSizePixel=0
-	scroll.ScrollBarThickness=3
-	scroll.ScrollBarImageColor3=ACCENT
+	scroll.ScrollBarThickness=2
+	scroll.ScrollBarImageColor3=BG3
 	scroll.ScrollingDirection=Enum.ScrollingDirection.Y
-	scroll.CanvasSize=UDim2.new(0,0,0,300)
+	scroll.CanvasSize=UDim2.new(0,0,0,500)
 	scroll.Visible=name==activeTab
-	scroll.Parent=MainFrame
+	scroll.ZIndex=3
+	scroll.Parent=Popup
 	tabScrolls[name]=scroll
 
 	local inner=Instance.new("Frame")
-	inner.Size=UDim2.new(1,0,0,300)
+	inner.Size=UDim2.new(1,0,0,500)
 	inner.BackgroundTransparency=1
-	inner.BorderSizePixel=0
+	inner.ZIndex=3
 	inner.Parent=scroll
 	tabInners[name]=inner
 end
 
--- ACCENT UPDATE FUNCTION
 local accentListeners={}
-local function registerAccent(obj,prop)
-	table.insert(accentListeners,{obj=obj,prop=prop})
-end
-
+local function registerAccent(obj,prop) table.insert(accentListeners,{obj=obj,prop=prop}) end
 local function applyAccent(color)
 	ACCENT=color
-	for _,v in pairs(accentListeners) do
-		pcall(function() v.obj[v.prop]=color end)
-	end
-	for n,btn in pairs(tabs) do
-		if n==activeTab then btn.TextColor3=color end
-	end
-	for _,s in pairs(tabScrolls) do
-		s.ScrollBarImageColor3=color
-	end
+	for _,v in pairs(accentListeners) do pcall(function() v.obj[v.prop]=color end) end
+	for n,btn in pairs(tabs) do if n==activeTab then btn.TextColor3=TEXT end end
 end
 
 local function switchTab(name)
-	activeTab=name
+	local idx=table.find(tabNames,name)
+	activeTab=name activeTabIndex=idx
+	TweenService:Create(TabIndicator,TweenInfo.new(0.2,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{
+		Position=UDim2.new((idx-1)/#tabNames,2,0,2)
+	}):Play()
 	for n,btn in pairs(tabs) do
-		btn.BackgroundColor3=n==name and Color3.fromRGB(35,35,35) or Color3.fromRGB(28,28,28)
-		btn.TextColor3=n==name and ACCENT or Color3.fromRGB(150,150,150)
+		TweenService:Create(btn,TweenInfo.new(0.15),{TextColor3=n==name and TEXT or SUBTEXT}):Play()
 	end
 	for n,s in pairs(tabScrolls) do s.Visible=n==name end
 end
@@ -182,142 +223,338 @@ end
 
 -- STATUS BAR
 local StatusBar=Instance.new("Frame")
-StatusBar.Size=UDim2.new(1,0,0,30)
-StatusBar.Position=UDim2.new(0,0,1,-30)
-StatusBar.BackgroundColor3=Color3.fromRGB(18,18,18)
+StatusBar.Size=UDim2.new(1,-40,0,38)
+StatusBar.Position=UDim2.new(0,20,1,-58)
+StatusBar.BackgroundColor3=BG2
 StatusBar.BorderSizePixel=0
-StatusBar.Parent=MainFrame
-Instance.new("UICorner",StatusBar).CornerRadius=UDim.new(0,14)
+StatusBar.ZIndex=3
+StatusBar.Parent=Popup
+Instance.new("UICorner",StatusBar).CornerRadius=UDim.new(0,10)
 
-local statusFix=Instance.new("Frame")
-statusFix.Size=UDim2.new(1,0,0,14)
-statusFix.Position=UDim2.new(0,0,0,0)
-statusFix.BackgroundColor3=Color3.fromRGB(18,18,18)
-statusFix.BorderSizePixel=0
-statusFix.Parent=StatusBar
+local StatusDot=Instance.new("Frame")
+StatusDot.Size=UDim2.new(0,8,0,8)
+StatusDot.Position=UDim2.new(0,14,0.5,-4)
+StatusDot.BackgroundColor3=SUBTEXT
+StatusDot.BorderSizePixel=0
+StatusDot.ZIndex=4
+StatusDot.Parent=StatusBar
+Instance.new("UICorner",StatusDot).CornerRadius=UDim.new(1,0)
 
 local StatusLbl=Instance.new("TextLabel")
-StatusLbl.Size=UDim2.new(1,-8,1,0)
-StatusLbl.Position=UDim2.new(0,8,0,0)
+StatusLbl.Size=UDim2.new(1,-36,1,0)
+StatusLbl.Position=UDim2.new(0,30,0,0)
 StatusLbl.BackgroundTransparency=1
-StatusLbl.Text="● Idle"
+StatusLbl.Text="Idle"
 StatusLbl.TextScaled=true
 StatusLbl.Font=Enum.Font.Gotham
-StatusLbl.TextColor3=Color3.fromRGB(150,150,150)
+StatusLbl.TextColor3=SUBTEXT
 StatusLbl.TextXAlignment=Enum.TextXAlignment.Left
+StatusLbl.ZIndex=4
 StatusLbl.Parent=StatusBar
 
--- HELPERS
-local function mkBtn(parent,text,pos,color)
-	local b=Instance.new("TextButton")
-	b.Size=UDim2.new(0.9,0,0,34)
-	b.Position=pos
-	b.Text=text b.TextScaled=true
-	b.Font=Enum.Font.Gotham
-	b.BackgroundColor3=color or RED
-	b.TextColor3=Color3.new(1,1,1)
-	b.Parent=parent
-	Instance.new("UICorner",b).CornerRadius=UDim.new(0,10)
-	return b
+-- OPEN BUTTON (shown when GUI closed)
+local OpenBtn=Instance.new("TextButton")
+OpenBtn.Size=UDim2.new(0,44,0,44)
+OpenBtn.Position=UDim2.new(0,16,0.5,-22)
+OpenBtn.BackgroundColor3=BG
+OpenBtn.Text="✦"
+OpenBtn.TextScaled=true
+OpenBtn.Font=Enum.Font.GothamBold
+OpenBtn.TextColor3=ACCENT
+OpenBtn.ZIndex=10
+OpenBtn.Visible=false
+OpenBtn.Parent=ScreenGui
+Instance.new("UICorner",OpenBtn).CornerRadius=UDim.new(0,12)
+registerAccent(OpenBtn,"TextColor3")
+
+local Shadow2=Instance.new("ImageLabel")
+Shadow2.Size=UDim2.new(1,20,1,20)
+Shadow2.Position=UDim2.new(0,-10,0,-10)
+Shadow2.BackgroundTransparency=1
+Shadow2.Image="rbxassetid://6014261993"
+Shadow2.ImageColor3=Color3.new(0,0,0)
+Shadow2.ImageTransparency=0.4
+Shadow2.ScaleType=Enum.ScaleType.Slice
+Shadow2.SliceCenter=Rect.new(49,49,450,450)
+Shadow2.ZIndex=9
+Shadow2.Parent=OpenBtn
+
+local function openGUI()
+	guiOpen=true
+	Backdrop.Visible=true
+	Popup.Visible=true
+	OpenBtn.Visible=false
+	Popup.Size=UDim2.new(0,0,0,0)
+	Popup.BackgroundTransparency=1
+	TweenService:Create(Popup,TweenInfo.new(0.25,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{
+		Size=UDim2.new(0,320,0,420),
+		BackgroundTransparency=0
+	}):Play()
 end
 
-local function mkLabel(parent,text,pos)
-	local l=Instance.new("TextLabel")
-	l.Size=UDim2.new(0.9,0,0,18)
-	l.Position=pos
-	l.BackgroundTransparency=1
-	l.Text=text l.TextScaled=true
-	l.Font=Enum.Font.Gotham
-	l.TextColor3=Color3.new(1,1,1)
-	l.Parent=parent
-	return l
-end
-
-local function mkSlider(parent,pos,fillColor,initPct)
-	local bg=Instance.new("Frame")
-	bg.Size=UDim2.new(0.9,0,0,16)
-	bg.Position=pos
-	bg.BackgroundColor3=Color3.fromRGB(45,45,45)
-	bg.Parent=parent
-	Instance.new("UICorner",bg).CornerRadius=UDim.new(0,10)
-	local fill=Instance.new("Frame")
-	fill.Size=UDim2.new(initPct or 0,0,1,0)
-	fill.BackgroundColor3=fillColor
-	fill.Parent=bg
-	Instance.new("UICorner",fill).CornerRadius=UDim.new(0,10)
-	return bg,fill
-end
-
--- AIM TAB
-local aimInner=tabInners["Aim"]
-local AimToggle=mkBtn(aimInner,"Aimlock: OFF",UDim2.new(0.05,0,0,6))
-local TargetLabel=mkLabel(aimInner,"Target: Head",UDim2.new(0.05,0,0,48))
-
-local partBtns={}
-for i,part in ipairs({"Head","Torso"}) do
-	local btn=Instance.new("TextButton")
-	btn.Size=UDim2.new(0.42,0,0,24)
-	btn.Position=UDim2.new(0.05+(i-1)*0.48,0,0,68)
-	btn.Text=part btn.TextScaled=true
-	btn.Font=Enum.Font.Gotham
-	btn.BackgroundColor3=part==TARGET_PART and Color3.fromRGB(0,120,200) or Color3.fromRGB(55,55,55)
-	btn.TextColor3=Color3.new(1,1,1)
-	btn.Parent=aimInner
-	Instance.new("UICorner",btn).CornerRadius=UDim.new(0,8)
-	partBtns[part]=btn
-	btn.MouseButton1Click:Connect(function()
-		TARGET_PART=part
-		TargetLabel.Text="Target: "..part
-		for p,b in pairs(partBtns) do
-			b.BackgroundColor3=p==TARGET_PART and Color3.fromRGB(0,120,200) or Color3.fromRGB(55,55,55)
-		end
+local function closeGUI()
+	guiOpen=false
+	TweenService:Create(Popup,TweenInfo.new(0.18,Enum.EasingStyle.Quad,Enum.EasingDirection.In),{
+		Size=UDim2.new(0,280,0,380),
+		BackgroundTransparency=0.3
+	}):Play()
+	task.delay(0.18,function()
+		Popup.Visible=false
+		Backdrop.Visible=false
+		OpenBtn.Visible=true
 	end)
 end
 
-local FOVLabel=mkLabel(aimInner,"FOV: "..FOV_RADIUS,UDim2.new(0.05,0,0,102))
-local FOVbg,FOVfill=mkSlider(aimInner,UDim2.new(0.05,0,0,122),ACCENT,FOV_RADIUS/400)
+CloseBtn.MouseButton1Click:Connect(closeGUI)
+Backdrop.MouseButton1Click:Connect(closeGUI)
+OpenBtn.MouseButton1Click:Connect(openGUI)
+
+-- HELPERS
+local function mkToggle(parent,text,pos)
+	local row=Instance.new("Frame")
+	row.Size=UDim2.new(1,0,0,40)
+	row.Position=pos
+	row.BackgroundColor3=BG2
+	row.BorderSizePixel=0
+	row.ZIndex=4
+	row.Parent=parent
+	Instance.new("UICorner",row).CornerRadius=UDim.new(0,10)
+
+	local lbl=Instance.new("TextLabel")
+	lbl.Size=UDim2.new(1,-60,1,0)
+	lbl.Position=UDim2.new(0,14,0,0)
+	lbl.BackgroundTransparency=1
+	lbl.Text=text lbl.TextScaled=true
+	lbl.Font=Enum.Font.Gotham
+	lbl.TextColor3=TEXT
+	lbl.TextXAlignment=Enum.TextXAlignment.Left
+	lbl.ZIndex=5 lbl.Parent=row
+
+	local pill=Instance.new("Frame")
+	pill.Size=UDim2.new(0,40,0,22)
+	pill.Position=UDim2.new(1,-54,0.5,-11)
+	pill.BackgroundColor3=BG3
+	pill.BorderSizePixel=0
+	pill.ZIndex=5 pill.Parent=row
+	Instance.new("UICorner",pill).CornerRadius=UDim.new(1,0)
+
+	local knob=Instance.new("Frame")
+	knob.Size=UDim2.new(0,16,0,16)
+	knob.Position=UDim2.new(0,3,0.5,-8)
+	knob.BackgroundColor3=SUBTEXT
+	knob.BorderSizePixel=0
+	knob.ZIndex=6 knob.Parent=pill
+	Instance.new("UICorner",knob).CornerRadius=UDim.new(1,0)
+
+	local state=false
+	local function setState(v)
+		state=v
+		TweenService:Create(pill,TweenInfo.new(0.2),{BackgroundColor3=v and ACCENT or BG3}):Play()
+		TweenService:Create(knob,TweenInfo.new(0.2),{
+			Position=v and UDim2.new(1,-19,0.5,-8) or UDim2.new(0,3,0.5,-8),
+			BackgroundColor3=v and Color3.new(1,1,1) or SUBTEXT
+		}):Play()
+	end
+
+	row.InputBegan:Connect(function(i)
+		if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
+			setState(not state)
+		end
+	end)
+
+	registerAccent(pill,"BackgroundColor3")
+
+	return row,function() return state end,setState
+end
+
+local function mkSliderRow(parent,label,pos,fillColor,initPct)
+	local row=Instance.new("Frame")
+	row.Size=UDim2.new(1,0,0,52)
+	row.Position=pos
+	row.BackgroundColor3=BG2
+	row.BorderSizePixel=0
+	row.ZIndex=4
+	row.Parent=parent
+	Instance.new("UICorner",row).CornerRadius=UDim.new(0,10)
+
+	local lbl=Instance.new("TextLabel")
+	lbl.Size=UDim2.new(0.6,0,0,22)
+	lbl.Position=UDim2.new(0,14,0,8)
+	lbl.BackgroundTransparency=1
+	lbl.Text=label lbl.TextScaled=true
+	lbl.Font=Enum.Font.Gotham
+	lbl.TextColor3=TEXT
+	lbl.TextXAlignment=Enum.TextXAlignment.Left
+	lbl.ZIndex=5 lbl.Parent=row
+
+	local valLbl=Instance.new("TextLabel")
+	valLbl.Size=UDim2.new(0.35,0,0,22)
+	valLbl.Position=UDim2.new(0.65,0,0,8)
+	valLbl.BackgroundTransparency=1
+	valLbl.Text="" valLbl.TextScaled=true
+	valLbl.Font=Enum.Font.GothamBold
+	valLbl.TextColor3=ACCENT
+	valLbl.TextXAlignment=Enum.TextXAlignment.Right
+	valLbl.ZIndex=5 valLbl.Parent=row
+	registerAccent(valLbl,"TextColor3")
+
+	local track=Instance.new("Frame")
+	track.Size=UDim2.new(1,-28,0,6)
+	track.Position=UDim2.new(0,14,0,34)
+	track.BackgroundColor3=BG3
+	track.BorderSizePixel=0
+	track.ZIndex=5 track.Parent=row
+	Instance.new("UICorner",track).CornerRadius=UDim.new(1,0)
+
+	local fill=Instance.new("Frame")
+	fill.Size=UDim2.new(initPct or 0,0,1,0)
+	fill.BackgroundColor3=fillColor
+	fill.BorderSizePixel=0
+	fill.ZIndex=6 fill.Parent=track
+	Instance.new("UICorner",fill).CornerRadius=UDim.new(1,0)
+
+	return track,fill,valLbl
+end
+
+local function mkSegment(parent,options,pos,current)
+	local row=Instance.new("Frame")
+	row.Size=UDim2.new(1,0,0,40)
+	row.Position=pos
+	row.BackgroundColor3=BG2
+	row.BorderSizePixel=0
+	row.ZIndex=4 row.Parent=parent
+	Instance.new("UICorner",row).CornerRadius=UDim.new(0,10)
+
+	local selected=current
+	local btns={}
+	for i,opt in ipairs(options) do
+		local btn=Instance.new("TextButton")
+		btn.Size=UDim2.new(1/#options,-4,1,-8)
+		btn.Position=UDim2.new((i-1)/#options,2,0,4)
+		btn.Text=opt btn.TextScaled=true
+		btn.Font=Enum.Font.GothamBold
+		btn.BackgroundColor3=opt==current and BG3 or Color3.fromRGB(0,0,0)
+		btn.BackgroundTransparency=opt==current and 0 or 1
+		btn.TextColor3=opt==current and TEXT or SUBTEXT
+		btn.BorderSizePixel=0
+		btn.ZIndex=5 btn.Parent=row
+		Instance.new("UICorner",btn).CornerRadius=UDim.new(0,8)
+		btns[opt]=btn
+		btn.MouseButton1Click:Connect(function()
+			selected=opt
+			for o,b in pairs(btns) do
+				TweenService:Create(b,TweenInfo.new(0.15),{
+					BackgroundTransparency=o==opt and 0 or 1,
+					TextColor3=o==opt and TEXT or SUBTEXT,
+					BackgroundColor3=BG3
+				}):Play()
+			end
+		end)
+	end
+	return row,function() return selected end
+end
+
+local function sectionLabel(parent,text,pos)
+	local l=Instance.new("TextLabel")
+	l.Size=UDim2.new(1,0,0,18)
+	l.Position=pos
+	l.BackgroundTransparency=1
+	l.Text=text:upper() l.TextScaled=true
+	l.Font=Enum.Font.GothamBold
+	l.TextColor3=SUBTEXT
+	l.TextXAlignment=Enum.TextXAlignment.Left
+	l.ZIndex=4 l.Parent=parent
+	return l
+end
+
+-- AIM TAB
+local ai=tabInners["Aim"]
+sectionLabel(ai,"Aimlock",UDim2.new(0,0,0,0))
+local _,getAim,setAim=mkToggle(ai,"Aimlock",UDim2.new(0,0,0,22))
+
+sectionLabel(ai,"Target Part",UDim2.new(0,0,0,74))
+local _,getTarget_=mkSegment(ai,{"Head","Torso"},UDim2.new(0,0,0,96),"Head")
+
+sectionLabel(ai,"Lock Mode",UDim2.new(0,0,0,148))
+local _,getLockMode=mkSegment(ai,{"Crosshair","Distance"},UDim2.new(0,0,0,170),LOCK_MODE)
+
+sectionLabel(ai,"Team Check",UDim2.new(0,0,0,222))
+local _,getTeamCheck,setTeamCheck=mkToggle(ai,"Skip Teammates",UDim2.new(0,0,0,244))
+
+sectionLabel(ai,"FOV",UDim2.new(0,0,0,296))
+local FOVtrack,FOVfill,FOVval=mkSliderRow(ai,"FOV Radius",UDim2.new(0,0,0,318),ACCENT,FOV_RADIUS/400)
+FOVval.Text=tostring(FOV_RADIUS)
 registerAccent(FOVfill,"BackgroundColor3")
 
-local SMLabel=mkLabel(aimInner,"Smooth: "..SMOOTHNESS,UDim2.new(0.05,0,0,148))
-local SMbg,SMfill=mkSlider(aimInner,UDim2.new(0.05,0,0,168),Color3.fromRGB(0,200,120),SMOOTHNESS)
+sectionLabel(ai,"Smoothness",UDim2.new(0,0,0,382))
+local SMtrack,SMfill,SMval=mkSliderRow(ai,"Lock Speed",UDim2.new(0,0,0,404),Color3.fromRGB(80,200,160),SMOOTHNESS)
+SMval.Text=tostring(SMOOTHNESS)
 
-local PRLabel=mkLabel(aimInner,"Predict: "..PREDICTION,UDim2.new(0.05,0,0,194))
-local PRbg,PRfill=mkSlider(aimInner,UDim2.new(0.05,0,0,214),Color3.fromRGB(255,170,0),PREDICTION)
+sectionLabel(ai,"Prediction",UDim2.new(0,0,0,468))
+local PRtrack,PRfill,PRval=mkSliderRow(ai,"Velocity Lead",UDim2.new(0,0,0,490),Color3.fromRGB(255,180,60),PREDICTION)
+PRval.Text=tostring(PREDICTION)
 
 -- ESP TAB
-local espInner=tabInners["ESP"]
-local ESPToggle=mkBtn(espInner,"ESP: OFF",UDim2.new(0.05,0,0,6))
-local espInfo=mkLabel(espInner,"Shows boxes + stud distance",UDim2.new(0.05,0,0,48))
-espInfo.TextColor3=Color3.fromRGB(120,120,120)
+local ei=tabInners["ESP"]
+sectionLabel(ei,"ESP",UDim2.new(0,0,0,0))
+local _,getESP,setESP=mkToggle(ei,"Show Boxes",UDim2.new(0,0,0,22))
+
+sectionLabel(ei,"Tracers",UDim2.new(0,0,0,74))
+local _,getTracers,setTracers=mkToggle(ei,"Show Tracers",UDim2.new(0,0,0,96))
+
+sectionLabel(ei,"Health Bars",UDim2.new(0,0,0,148))
+local _,getHealth,setHealth=mkToggle(ei,"Show Health",UDim2.new(0,0,0,170))
 
 -- THEME TAB
-local themeInner=tabInners["Theme"]
-local themeTitle=mkLabel(themeInner,"Accent Color",UDim2.new(0.05,0,0,6))
-themeTitle.TextColor3=Color3.fromRGB(180,180,180)
+local ti=tabInners["Theme"]
+sectionLabel(ti,"Accent Color",UDim2.new(0,0,0,0))
 
 local presetBtns={}
 for i,preset in ipairs(PRESETS) do
-	local row=math.ceil(i/2)-1
-	local col=(i-1)%2
 	local btn=Instance.new("TextButton")
-	btn.Size=UDim2.new(0.42,0,0,30)
-	btn.Position=UDim2.new(0.05+col*0.48,0,0,28+row*38)
-	btn.Text=preset.name
-	btn.TextScaled=true
-	btn.Font=Enum.Font.GothamBold
-	btn.BackgroundColor3=preset.color
-	btn.TextColor3=Color3.new(1,1,1)
+	btn.Size=UDim2.new(1,0,0,38)
+	btn.Position=UDim2.new(0,0,0,22+(i-1)*46)
+	btn.Text="" btn.ZIndex=4
+	btn.BackgroundColor3=BG2
 	btn.BorderSizePixel=0
-	btn.Parent=themeInner
+	btn.Parent=ti
 	Instance.new("UICorner",btn).CornerRadius=UDim.new(0,10)
-	presetBtns[i]=btn
+
+	local swatch=Instance.new("Frame")
+	swatch.Size=UDim2.new(0,20,0,20)
+	swatch.Position=UDim2.new(0,10,0.5,-10)
+	swatch.BackgroundColor3=preset.color
+	swatch.BorderSizePixel=0
+	swatch.ZIndex=5 swatch.Parent=btn
+	Instance.new("UICorner",swatch).CornerRadius=UDim.new(1,0)
+
+	local name=Instance.new("TextLabel")
+	name.Size=UDim2.new(1,-50,1,0)
+	name.Position=UDim2.new(0,40,0,0)
+	name.BackgroundTransparency=1
+	name.Text=preset.name name.TextScaled=true
+	name.Font=Enum.Font.GothamBold
+	name.TextColor3=TEXT
+	name.TextXAlignment=Enum.TextXAlignment.Left
+	name.ZIndex=5 name.Parent=btn
+
+	local check=Instance.new("TextLabel")
+	check.Size=UDim2.new(0,20,0,20)
+	check.Position=UDim2.new(1,-32,0.5,-10)
+	check.BackgroundTransparency=1
+	check.Text="✓" check.TextScaled=true
+	check.Font=Enum.Font.GothamBold
+	check.TextColor3=preset.color
+	check.Visible=i==1
+	check.ZIndex=5 check.Parent=btn
+	presetBtns[i]={btn=btn,check=check}
+
 	btn.MouseButton1Click:Connect(function()
 		applyAccent(preset.color)
-		-- highlight selected
-		for _,b in pairs(presetBtns) do
-			b.BorderSizePixel=0
+		swatch.BackgroundColor3=preset.color
+		for j,pb in pairs(presetBtns) do
+			pb.check.Visible=j==i
 		end
-		btn.BorderSizePixel=3
 	end)
 end
 
@@ -327,113 +564,63 @@ FOVCircle.AnchorPoint=Vector2.new(0.5,0.5)
 FOVCircle.Position=UDim2.new(0.5,0,0.5,0)
 FOVCircle.Size=UDim2.new(0,FOV_RADIUS*2,0,FOV_RADIUS*2)
 FOVCircle.BackgroundColor3=ACCENT
-FOVCircle.BackgroundTransparency=0.75
+FOVCircle.BackgroundTransparency=0.8
 FOVCircle.BorderSizePixel=0
 FOVCircle.Visible=false
+FOVCircle.ZIndex=1
 FOVCircle.Parent=ScreenGui
 Instance.new("UICorner",FOVCircle).CornerRadius=UDim.new(1,0)
 registerAccent(FOVCircle,"BackgroundColor3")
 
 local TargetDisplay=Instance.new("TextLabel")
-TargetDisplay.Size=UDim2.new(0,180,0,24)
+TargetDisplay.Size=UDim2.new(0,180,0,26)
 TargetDisplay.AnchorPoint=Vector2.new(0.5,0.5)
-TargetDisplay.Position=UDim2.new(0.5,0,0.5,-(FOV_RADIUS+18))
+TargetDisplay.Position=UDim2.new(0.5,0,0.5,-(FOV_RADIUS+20))
 TargetDisplay.BackgroundColor3=Color3.fromRGB(0,0,0)
-TargetDisplay.BackgroundTransparency=0.4
+TargetDisplay.BackgroundTransparency=0.5
 TargetDisplay.TextScaled=true
 TargetDisplay.Font=Enum.Font.GothamBold
 TargetDisplay.TextColor3=ACCENT
 TargetDisplay.Visible=false
+TargetDisplay.ZIndex=1
 TargetDisplay.Parent=ScreenGui
 Instance.new("UICorner",TargetDisplay).CornerRadius=UDim.new(0,8)
 registerAccent(TargetDisplay,"TextColor3")
 
--- PULSE FUNCTION
+-- PULSE
 local function startPulse()
 	if pulseTween then pulseTween:Cancel() end
 	local function doPulse()
-		if not AimEnabled then FOVCircle.BackgroundTransparency=0.75 return end
-		local target=pulseUp and 0.6 or 0.88
+		if not AimEnabled then FOVCircle.BackgroundTransparency=0.8 return end
+		local t=pulseUp and 0.65 or 0.9
 		pulseUp=not pulseUp
-		pulseTween=TweenService:Create(FOVCircle,TweenInfo.new(0.8,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut),{BackgroundTransparency=target})
+		pulseTween=TweenService:Create(FOVCircle,TweenInfo.new(0.9,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut),{BackgroundTransparency=t})
 		pulseTween:Play()
-		pulseTween.Completed:Connect(function()
-			if AimEnabled then doPulse() end
-		end)
+		pulseTween.Completed:Connect(function() if AimEnabled then doPulse() end end)
 	end
 	doPulse()
 end
 
 local function stopPulse()
 	if pulseTween then pulseTween:Cancel() pulseTween=nil end
-	FOVCircle.BackgroundTransparency=0.75
+	FOVCircle.BackgroundTransparency=0.8
 end
 
--- TOGGLES
-AimToggle.MouseButton1Click:Connect(function()
-	AimEnabled=not AimEnabled
-	AimToggle.Text="Aimlock: "..(AimEnabled and "ON" or "OFF")
-	AimToggle.BackgroundColor3=AimEnabled and ACTIVE or RED
-	FOVCircle.Visible=AimEnabled
-	if AimEnabled then
-		startPulse()
-	else
-		stopPulse()
-		TargetDisplay.Visible=false
-		FOVCircle.BackgroundColor3=ACCENT
-	end
-end)
-
-ESPToggle.MouseButton1Click:Connect(function()
-	ESPEnabled=not ESPEnabled
-	ESPToggle.Text="ESP: "..(ESPEnabled and "ON" or "OFF")
-	ESPToggle.BackgroundColor3=ESPEnabled and ACTIVE or RED
-	if not ESPEnabled then for _,b in pairs(espBoxes) do b:Destroy() end espBoxes={} end
-end)
-
-MinBtn.MouseButton1Click:Connect(function()
-	MINIMIZED=not MINIMIZED
-	TabBar.Visible=not MINIMIZED
-	StatusBar.Visible=not MINIMIZED
-	for _,s in pairs(tabScrolls) do s.Visible=false end
-	if not MINIMIZED then tabScrolls[activeTab].Visible=true end
-	MainFrame.Size=MINIMIZED and UDim2.new(0,180,0,40) or UDim2.new(0,180,0,340)
-	MinBtn.Text=MINIMIZED and "+" or "-"
-	syncShadow()
-end)
-
--- DRAG
-local dragInput,dragStart,frameStart
-TitleBar.InputBegan:Connect(function(i)
-	if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
-		dragInput=i dragStart=i.Position frameStart=MainFrame.Position
-	end
-end)
-UserInputService.InputChanged:Connect(function(i)
-	if i==dragInput and dragStart and frameStart then
-		local d=i.Position-dragStart
-		MainFrame.Position=UDim2.new(frameStart.X.Scale,frameStart.X.Offset+d.X,frameStart.Y.Scale,frameStart.Y.Offset+d.Y)
-		syncShadow()
-	end
-end)
-UserInputService.InputEnded:Connect(function(i)
-	if i==dragInput then dragInput=nil dragStart=nil frameStart=nil end
-end)
-
--- SLIDERS
-local active={}
+-- SLIDER LOGIC
+local activeSlider=nil
 local sliders={
-	{FOVbg,FOVfill,FOVLabel,"FOV: ",400,false},
-	{SMbg,SMfill,SMLabel,"Smooth: ",1,true},
-	{PRbg,PRfill,PRLabel,"Predict: ",1,true},
+	{FOVtrack,FOVfill,FOVval,400,false},
+	{SMtrack,SMfill,SMval,1,true},
+	{PRtrack,PRfill,PRval,1,true},
 }
 
-local function doSlider(i,s,x)
+local function doSlider(i,x)
+	local s=sliders[i]
 	local p=math.clamp((x-s[1].AbsolutePosition.X)/s[1].AbsoluteSize.X,0,1)
-	local v=s[6] and math.floor(p*s[5]*100)/100 or math.floor(p*s[5])
+	local v=s[5] and math.floor(p*s[4]*100)/100 or math.floor(p*s[4])
 	s[2].Size=UDim2.new(p,0,1,0)
-	s[3].Text=s[4]..v
-	if i==1 then FOV_RADIUS=v FOVCircle.Size=UDim2.new(0,v*2,0,v*2) TargetDisplay.Position=UDim2.new(0.5,0,0.5,-(v+18))
+	s[3].Text=tostring(v)
+	if i==1 then FOV_RADIUS=v FOVCircle.Size=UDim2.new(0,v*2,0,v*2) TargetDisplay.Position=UDim2.new(0.5,0,0.5,-(v+20))
 	elseif i==2 then SMOOTHNESS=v
 	elseif i==3 then PREDICTION=v end
 end
@@ -441,20 +628,20 @@ end
 for i,s in ipairs(sliders) do
 	s[1].InputBegan:Connect(function(inp)
 		if inp.UserInputType==Enum.UserInputType.MouseButton1 or inp.UserInputType==Enum.UserInputType.Touch then
-			active[i]=true doSlider(i,s,inp.Position.X)
+			activeSlider=i doSlider(i,inp.Position.X)
 		end
 	end)
 end
 
 UserInputService.InputChanged:Connect(function(inp)
-	if inp.UserInputType==Enum.UserInputType.MouseMovement or inp.UserInputType==Enum.UserInputType.Touch then
-		for i,s in ipairs(sliders) do if active[i] then doSlider(i,s,inp.Position.X) end end
+	if activeSlider and (inp.UserInputType==Enum.UserInputType.MouseMovement or inp.UserInputType==Enum.UserInputType.Touch) then
+		doSlider(activeSlider,inp.Position.X)
 	end
 end)
 
 UserInputService.InputEnded:Connect(function(inp)
 	if inp.UserInputType==Enum.UserInputType.MouseButton1 or inp.UserInputType==Enum.UserInputType.Touch then
-		for i in pairs(active) do active[i]=false end
+		activeSlider=nil
 	end
 end)
 
@@ -462,102 +649,4 @@ end)
 local function getBox(plr)
 	if espBoxes[plr] then return espBoxes[plr] end
 	local box=Instance.new("Frame")
-	box.BackgroundTransparency=1 box.BorderSizePixel=0 box.Parent=ScreenGui
-	local function line() local f=Instance.new("Frame") f.BackgroundColor3=Color3.fromRGB(255,50,50) f.BorderSizePixel=0 f.Parent=box return f end
-	local t,b,l,r=line(),line(),line(),line()
-	t.Size=UDim2.new(1,0,0,2) t.Position=UDim2.new(0,0,0,0)
-	b.Size=UDim2.new(1,0,0,2) b.Position=UDim2.new(0,0,1,-2)
-	l.Size=UDim2.new(0,2,1,0) l.Position=UDim2.new(0,0,0,0)
-	r.Size=UDim2.new(0,2,1,0) r.Position=UDim2.new(1,-2,0,0)
-	local dl=Instance.new("TextLabel")
-	dl.Name="Dist" dl.Size=UDim2.new(1,0,0,16) dl.Position=UDim2.new(0,0,0,-18)
-	dl.BackgroundTransparency=1 dl.TextScaled=true dl.Font=Enum.Font.GothamBold
-	dl.TextColor3=Color3.new(1,1,1) dl.Parent=box
-	espBoxes[plr]=box return box
-end
-
-local function removeBox(plr) if espBoxes[plr] then espBoxes[plr]:Destroy() espBoxes[plr]=nil end end
-Players.PlayerRemoving:Connect(removeBox)
-
-local function isVisible(part)
-	local rp=RaycastParams.new()
-	rp.FilterType=Enum.RaycastFilterType.Exclude
-	rp.FilterDescendantsInstances={player.Character}
-	local res=workspace:Raycast(camera.CFrame.Position,part.Position-camera.CFrame.Position,rp)
-	return not res or res.Instance:IsDescendantOf(part.Parent)
-end
-
-local function getTarget()
-	local closest,closestPlr,shortest=nil,nil,math.huge
-	for _,plr in pairs(Players:GetPlayers()) do
-		if plr~=player and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") and plr.Character:FindFirstChild("Humanoid") and plr.Character.Humanoid.Health>0 then
-			local part=plr.Character:FindFirstChild(TARGET_PART) or plr.Character.HumanoidRootPart
-			local sp,on=camera:WorldToViewportPoint(part.Position)
-			if on then
-				local d=(Vector2.new(sp.X,sp.Y)-Vector2.new(camera.ViewportSize.X/2,camera.ViewportSize.Y/2)).Magnitude
-				if d<FOV_RADIUS and d<shortest and isVisible(part) then shortest=d closest=part closestPlr=plr end
-			end
-		end
-	end
-	TargetDisplay.Text=closestPlr and "🎯 "..closestPlr.Name or ""
-	TargetDisplay.Visible=closestPlr~=nil
-	return closest,closestPlr
-end
-
-local function updateStatus(locked,target)
-	if not AimEnabled and not ESPEnabled then
-		StatusLbl.Text="● Idle" StatusLbl.TextColor3=Color3.fromRGB(120,120,120)
-	elseif locked and target then
-		StatusLbl.Text="● Locked: "..target.Name StatusLbl.TextColor3=GREEN
-	elseif AimEnabled then
-		StatusLbl.Text="● Searching..." StatusLbl.TextColor3=ACCENT
-	else
-		StatusLbl.Text="● ESP Active" StatusLbl.TextColor3=Color3.fromRGB(255,50,50)
-	end
-end
-
-syncShadow()
-
-RunService.RenderStepped:Connect(function()
-	local myHRP=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-	for _,plr in pairs(Players:GetPlayers()) do
-		if plr==player then continue end
-		if ESPEnabled and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") and plr.Character:FindFirstChild("Humanoid") and plr.Character.Humanoid.Health>0 then
-			local hrp=plr.Character.HumanoidRootPart
-			local head=plr.Character:FindFirstChild("Head")
-			local dist=myHRP and math.floor((myHRP.Position-hrp.Position).Magnitude) or math.huge
-			local rs,rv=camera:WorldToViewportPoint(hrp.Position)
-			local hs=camera:WorldToViewportPoint(head and head.Position or hrp.Position)
-			if rv then
-				local box=getBox(plr) box.Visible=true
-				local h=math.abs(hs.Y-rs.Y)*2.2 local w=h*0.6
-				box.Size=UDim2.new(0,w,0,h)
-				box.Position=UDim2.new(0,rs.X-w/2,0,rs.Y-h/1.2)
-				local dl=box:FindFirstChild("Dist")
-				if dl then dl.Text=dist.." studs" end
-			else if espBoxes[plr] then espBoxes[plr].Visible=false end end
-		else removeBox(plr) end
-	end
-
-	if not AimEnabled then
-		TargetDisplay.Visible=false
-		updateStatus(false,nil) return
-	end
-
-	local target,closestPlr=getTarget()
-	local locked=target~=nil
-	if locked then
-		FOVCircle.BackgroundColor3=GREEN
-	else
-		FOVCircle.BackgroundColor3=ACCENT
-	end
-	updateStatus(locked,closestPlr)
-	if not target then return end
-	local hrp=target.Parent and target.Parent:FindFirstChild("HumanoidRootPart")
-	local vel=hrp and hrp.AssemblyLinearVelocity or Vector3.new()
-	local predicted=target.Position+(vel*PREDICTION)
-	local camPos=camera.CFrame.Position
-	local goal=CFrame.new(camPos,predicted)
-	local lerped=camera.CFrame:Lerp(goal,SMOOTHNESS)
-	camera.CFrame=CFrame.new(camPos)*(lerped-lerped.Position)
-end)
+	box.BackgroundTransparency=1 box.BorderSi
